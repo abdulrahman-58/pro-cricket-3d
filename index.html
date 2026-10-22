@@ -1,0 +1,117 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Pro Cricket 3D Championship</title>
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <!-- 3D Three.js WebGL Canvas Container -->
+  <div id="canvas-container"></div>
+
+  <!-- TV Broadcast Presentation Overlay -->
+  <div class="hud-layer">
+    <!-- Top Bar: Tournament & Speed Radar -->
+    <div class="top-bar">
+      <div class="match-title-badge">
+        <h1>T20 Super League</h1>
+        <p id="match-context-text">Innings 1 | 2-Over Blitz</p>
+      </div>
+
+      <div id="speed-radar" class="speed-radar">
+        <span id="speed-val" class="speed-val">146.4</span>
+        <span class="speed-lbl">KM/H SPEED</span>
+      </div>
+    </div>
+
+    <!-- Center Big Event Alert (SIX / FOUR / OUT) -->
+    <div id="event-alert" class="event-alert">
+      <div id="event-badge" class="event-badge six">MAXIMUM 6</div>
+      <div id="event-sub" class="event-sub">94 Meters into the stands!</div>
+    </div>
+
+    <!-- Lower Third Scoreboard -->
+    <div class="lower-third-score">
+      <div class="score-card">
+        <!-- Main score row -->
+        <div class="score-row-main">
+          <div class="team-flag">PAK</div>
+          <div class="runs-overs">
+            <span id="main-score" class="main-score">0/0</span>
+            <span id="main-overs" class="main-overs">(0.0)</span>
+          </div>
+
+          <div class="batters-box">
+            <div class="batter-item">
+              <span id="striker-name" class="batter-name striker">B. Babar*</span>
+              <span id="striker-runs" class="batter-runs">0 (0)</span>
+            </div>
+            <div class="batter-item">
+              <span id="non-striker-name" class="batter-name">M. Rizwan</span>
+              <span id="non-striker-runs" class="batter-runs">0 (0)</span>
+            </div>
+          </div>
+
+          <div class="bowler-box">
+            <div id="bowler-name" class="bowler-name">J. Bumrah</div>
+            <div id="bowler-figs" class="bowler-figs">0.0-0-0-0</div>
+          </div>
+        </div>
+
+        <!-- Sub row: Run rates & recent balls -->
+        <div class="score-row-sub">
+          <div class="rates">
+            <span id="crr-text">CRR: 0.00</span>
+            <span id="target-text" style="display:none; color: #ffd600;">Target: --</span>
+          </div>
+          <div id="recent-balls" class="recent-balls"></div>
+        </div>
+      </div>
+
+      <!-- Commentary Ticker -->
+      <div class="commentary-bar">
+        <span class="mic-icon">🎙 LIVE:</span>
+        <span id="commentary-text">Match underway under floodlights. Bowler preparing his run-up.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delivery Type Picker (Top Right) -->
+  <div class="delivery-picker">
+    <select id="delivery-select">
+      <option value="Outswinger">Outswinger (Fast)</option>
+      <option value="Inswinger">Inswinger (Fast)</option>
+      <option value="Inswinging Yorker">Inswinging Yorker</option>
+      <option value="Heavy Bouncer">Heavy Bouncer</option>
+      <option value="Off Break">Off Break (Spin)</option>
+      <option value="Leg Break">Leg Break (Spin)</option>
+      <option value="Wrong-Un (Googly)">Googly</option>
+      <option value="Back-of-Hand Slower">Slower Ball</option>
+    </select>
+  </div>
+
+  <!-- Interactive Controls Layer (Mobile/Touch & Desktop) -->
+  <div class="controls-layer">
+    <!-- 360 Radial Shot Direction Wheel -->
+    <div class="shot-joystick-card">
+      <span id="shot-direction-name" class="shot-label">STRAIGHT DRIVE</span>
+      <div id="shot-wheel" class="wheel-container">
+        <div id="wheel-handle" class="wheel-handle"></div>
+      </div>
+    </div>
+
+    <!-- Action & Timing Buttons -->
+    <div class="action-card">
+      <button id="bowl-trigger-btn" class="bowl-btn">⚡ BOWL BALL</button>
+      <button id="loft-toggle-btn" class="loft-toggle-btn">GROUNDED [4]</button>
+      <button id="hit-shot-btn" class="hit-shot-btn">
+        <span>HIT</span>
+        <small style="font-size:10px; font-weight:700;">SWING</small>
+      </button>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

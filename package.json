@@ -1,0 +1,18 @@
+{
+    "version":  "1.0.0",
+    "name":  "pro-cricket-3d-mobile",
+    "scripts":  {
+                    "preview":  "vite preview",
+                    "build":  "vite build",
+                    "dev":  "vite --host"
+                },
+    "devDependencies":  {
+                            "vite":  "^5.4.9"
+                        },
+    "type":  "module",
+    "dependencies":  {
+                         "three":  "^0.169.0",
+                         "canvas-confetti":  "^1.9.4"
+                     },
+    "private":  true
+}
