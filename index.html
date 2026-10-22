@@ -10,13 +10,127 @@
   <!-- 3D Three.js WebGL Canvas Container -->
   <div id="canvas-container"></div>
 
-  <!-- TV Broadcast Presentation Overlay -->
-  <div class="hud-layer">
+  <!-- ============================================== -->
+  <!-- MODAL 1: TEAM SELECTION & MATCH SETUP -->
+  <!-- ============================================== -->
+  <div id="setup-modal" class="modal-overlay">
+    <div class="setup-card">
+      <div class="setup-header">
+        <h2>🏏 INTERNATIONAL CRICKET SERIES</h2>
+        <p>Select your team, opponent and match format</p>
+      </div>
+
+      <div class="team-selection-grid">
+        <!-- User Team Picker -->
+        <div class="team-picker-col">
+          <label>YOUR TEAM</label>
+          <div class="team-chips" id="user-team-chips">
+            <button class="team-chip active" data-team="PAK">🇵🇰 Pakistan</button>
+            <button class="team-chip" data-team="IND">🇮🇳 India</button>
+            <button class="team-chip" data-team="AUS">🇦🇺 Australia</button>
+            <button class="team-chip" data-team="ENG">🏴󠁧󠁢󠁥󠁮󠁧󠁿 England</button>
+          </div>
+        </div>
+
+        <div class="vs-divider">VS</div>
+
+        <!-- Opponent Team Picker -->
+        <div class="team-picker-col">
+          <label>OPPONENT TEAM</label>
+          <div class="team-chips" id="opp-team-chips">
+            <button class="team-chip" data-team="PAK">🇵🇰 Pakistan</button>
+            <button class="team-chip active" data-team="IND">🇮🇳 India</button>
+            <button class="team-chip" data-team="AUS">🇦🇺 Australia</button>
+            <button class="team-chip" data-team="ENG">🏴󠁧󠁢󠁥󠁮󠁧󠁿 England</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Match Overs Format -->
+      <div class="overs-picker-row">
+        <label>MATCH FORMAT:</label>
+        <div class="overs-chips" id="overs-chips">
+          <button class="overs-chip active" data-overs="2">2 OVERS (BLITZ)</button>
+          <button class="overs-chip" data-overs="5">5 OVERS (QUICK)</button>
+          <button class="overs-chip" data-overs="10">10 OVERS (T10)</button>
+        </div>
+      </div>
+
+      <button id="btn-proceed-toss" class="btn-primary-glow">GO TO COIN TOSS ➔</button>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL 2: 3D COIN TOSS CEREMONY -->
+  <!-- ============================================== -->
+  <div id="toss-modal" class="modal-overlay" style="display: none;">
+    <div class="toss-card">
+      <div class="toss-header">
+        <h3>🪙 OFFICIAL MATCH COIN TOSS</h3>
+        <p id="toss-captains-label">Captains walking out to the pitch</p>
+      </div>
+
+      <!-- Call Selection Phase -->
+      <div id="toss-call-section">
+        <p style="font-size:14px; margin-bottom:12px; color:#cfd8dc;">Choose your call:</p>
+        <div class="toss-btn-group">
+          <button class="toss-choice-btn" data-call="HEADS">HEADS</button>
+          <button class="toss-choice-btn" data-call="TAILS">TAILS</button>
+        </div>
+      </div>
+
+      <!-- Coin In Flight Status -->
+      <div id="toss-spinning-section" style="display:none;">
+        <div class="spinner-ring"></div>
+        <p style="font-size: 16px; font-weight: 700; color:#ffd600; margin-top: 14px;">Coin is spinning in the air...</p>
+      </div>
+
+      <!-- Decision Phase (Bat or Bowl) -->
+      <div id="toss-decision-section" style="display:none;">
+        <h4 id="toss-winner-banner" style="font-size: 20px; font-weight: 800; color: #00e676; margin-bottom: 8px;"></h4>
+        <p id="toss-instruction" style="font-size:13px; color:#b0bec5; margin-bottom: 16px;">What would you like to do?</p>
+        <div class="toss-btn-group">
+          <button id="btn-decide-bat" class="toss-choice-btn">BAT FIRST</button>
+          <button id="btn-decide-bowl" class="toss-choice-btn">BOWL FIRST</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL 3: STARTING PLAYING XI LINEUPS -->
+  <!-- ============================================== -->
+  <div id="lineup-modal" class="modal-overlay" style="display: none;">
+    <div class="lineup-card">
+      <div class="lineup-header">
+        <h3 id="lineup-title">MATCH DAY PLAYING XI</h3>
+        <p id="lineup-sub">International Cricket Council Approved</p>
+      </div>
+
+      <div class="lineup-columns">
+        <div class="lineup-col">
+          <h4 id="lineup-team1-name" style="color:#00e676;">PAKISTAN</h4>
+          <ul id="lineup-team1-list"></ul>
+        </div>
+        <div class="lineup-col">
+          <h4 id="lineup-team2-name" style="color:#40c4ff;">INDIA</h4>
+          <ul id="lineup-team2-list"></ul>
+        </div>
+      </div>
+
+      <button id="btn-start-match" class="btn-primary-glow">START MATCH NOW ⚡</button>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- TV BROADCAST PRESENTATION OVERLAY -->
+  <!-- ============================================== -->
+  <div id="hud-layer" class="hud-layer" style="display: none;">
     <!-- Top Bar: Tournament & Speed Radar -->
     <div class="top-bar">
       <div class="match-title-badge">
-        <h1>T20 Super League</h1>
-        <p id="match-context-text">Innings 1 | 2-Over Blitz</p>
+        <h1 id="hud-match-title">T20 Super League</h1>
+        <p id="match-context-text">Innings 1</p>
       </div>
 
       <div id="speed-radar" class="speed-radar">
@@ -36,7 +150,7 @@
       <div class="score-card">
         <!-- Main score row -->
         <div class="score-row-main">
-          <div class="team-flag">PAK</div>
+          <div id="hud-team-badge" class="team-flag">PAK</div>
           <div class="runs-overs">
             <span id="main-score" class="main-score">0/0</span>
             <span id="main-overs" class="main-overs">(0.0)</span>
@@ -78,7 +192,7 @@
   </div>
 
   <!-- Delivery Type Picker (Top Right) -->
-  <div class="delivery-picker">
+  <div id="delivery-picker" class="delivery-picker" style="display:none;">
     <select id="delivery-select">
       <option value="Outswinger">Outswinger (Fast)</option>
       <option value="Inswinger">Inswinger (Fast)</option>
@@ -92,7 +206,7 @@
   </div>
 
   <!-- Interactive Controls Layer (Mobile/Touch & Desktop) -->
-  <div class="controls-layer">
+  <div id="controls-layer" class="controls-layer" style="display: none;">
     <!-- 360 Radial Shot Direction Wheel -->
     <div class="shot-joystick-card">
       <span id="shot-direction-name" class="shot-label">STRAIGHT DRIVE</span>

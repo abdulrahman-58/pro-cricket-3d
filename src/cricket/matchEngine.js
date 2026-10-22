@@ -1,6 +1,13 @@
 ﻿export class MatchEngine {
-  constructor() {
-    this.totalOvers = 2; // Fast 2-over match for immediate mobile play
+  constructor(teamBatting, teamBowling, totalOvers = 2) {
+    this.initMatch(teamBatting, teamBowling, totalOvers);
+    this.listeners = [];
+  }
+
+  initMatch(teamBatting, teamBowling, totalOvers = 2) {
+    this.teamBatting = teamBatting;
+    this.teamBowling = teamBowling;
+    this.totalOvers = totalOvers;
     this.totalBallsLimit = this.totalOvers * 6;
 
     this.currentInnings = 1;
@@ -9,14 +16,33 @@
     this.legalBalls = 0;
     this.target = null;
 
-    this.striker = { name: "B. Babar", runs: 0, balls: 0, fours: 0, sixes: 0 };
-    this.nonStriker = { name: "M. Rizwan", runs: 0, balls: 0, fours: 0, sixes: 0 };
-    this.currentBowler = { name: "J. Bumrah", overs: "0.0", runs: 0, wickets: 0 };
+    // Pick top 2 batsmen from batting squad
+    this.striker = {
+      name: teamBatting.squad[0].name,
+      runs: 0,
+      balls: 0,
+      fours: 0,
+      sixes: 0
+    };
+    this.nonStriker = {
+      name: teamBatting.squad[1].name,
+      runs: 0,
+      balls: 0,
+      fours: 0,
+      sixes: 0
+    };
+
+    // Pick lead strike bowler from bowling squad
+    this.currentBowler = {
+      name: teamBowling.squad[7].name,
+      overs: "0.0",
+      runs: 0,
+      wickets: 0
+    };
 
     this.recentOvers = [];
     this.lastDeliveryOutcome = null;
-
-    this.listeners = [];
+    this.nextBatsmanIdx = 2;
   }
 
   subscribe(listener) {
@@ -41,6 +67,8 @@
     }
 
     return {
+      teamBatting: this.teamBatting,
+      teamBowling: this.teamBowling,
       innings: this.currentInnings,
       runs: this.totalRuns,
       wickets: this.wickets,
@@ -78,7 +106,7 @@
       if (isLofted) {
         outcome.runs = 6;
         this.striker.sixes++;
-        outcome.commentary = `WHAT A SHOT! Clean connection, sailing 92 meters for a MAXIMUM SIX!`;
+        outcome.commentary = `WHAT A SHOT! Clean connection, sailing 94 meters for a MAXIMUM SIX!`;
       } else {
         outcome.runs = 4;
         this.striker.fours++;
@@ -86,7 +114,6 @@
       }
     } else if (timingGrade === "GOOD") {
       if (isLofted) {
-        // High ball, either 4 or boundary catch
         if (Math.random() < 0.25) {
           outcome.isWicket = true;
           outcome.wicketType = "CAUGHT";
@@ -111,7 +138,7 @@
       } else {
         outcome.runs = 4;
         this.striker.fours++;
-        outcome.commentary = `Thick outside edge flying past the slip cordon down to the third-man boundary!`;
+        outcome.commentary = `Thick outside edge flying past slip cordon down to the third-man boundary!`;
       }
     }
 
@@ -143,8 +170,11 @@
       this.wickets++;
       this.currentBowler.wickets++;
       this.recentOvers.push("W");
-      // New batsman arrives
-      this.striker = { name: "S. Malik", runs: 0, balls: 0, fours: 0, sixes: 0 };
+
+      // Next batsman from squad
+      const nextName = this.teamBatting.squad[this.nextBatsmanIdx] ? this.teamBatting.squad[this.nextBatsmanIdx].name : "Tailender";
+      this.nextBatsmanIdx++;
+      this.striker = { name: nextName, runs: 0, balls: 0, fours: 0, sixes: 0 };
     } else {
       this.recentOvers.push(outcome.runs.toString());
       if (outcome.runs % 2 !== 0) {
@@ -175,13 +205,21 @@
       if (this.wickets >= 10 || this.legalBalls >= this.totalBallsLimit) {
         this.target = this.totalRuns + 1;
         this.currentInnings = 2;
+
+        // Switch Batting and Bowling Teams!
+        const tempTeam = this.teamBatting;
+        this.teamBatting = this.teamBowling;
+        this.teamBowling = tempTeam;
+
         this.totalRuns = 0;
         this.wickets = 0;
         this.legalBalls = 0;
         this.recentOvers = [];
-        this.striker = { name: "V. Kohli", runs: 0, balls: 0, fours: 0, sixes: 0 };
-        this.nonStriker = { name: "R. Sharma", runs: 0, balls: 0, fours: 0, sixes: 0 };
-        this.currentBowler = { name: "S. Afridi", overs: "0.0", runs: 0, wickets: 0 };
+        this.nextBatsmanIdx = 2;
+
+        this.striker = { name: this.teamBatting.squad[0].name, runs: 0, balls: 0, fours: 0, sixes: 0 };
+        this.nonStriker = { name: this.teamBatting.squad[1].name, runs: 0, balls: 0, fours: 0, sixes: 0 };
+        this.currentBowler = { name: this.teamBowling.squad[7].name, overs: "0.0", runs: 0, wickets: 0 };
       }
     }
   }

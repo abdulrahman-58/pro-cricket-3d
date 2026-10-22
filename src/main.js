@@ -5,36 +5,42 @@ import { PlayerRigs } from './graphics/playerRigs.js';
 import { BallPhysicsEngine, DeliveryTypes } from './physics/ballPhysics.js';
 import { SoundEngine } from './audio/soundEngine.js';
 import { MatchEngine } from './cricket/matchEngine.js';
+import { Teams } from './cricket/teamsData.js';
+import { TossEngine } from './cricket/tossEngine.js';
 
 class ProCricketGame {
   constructor() {
     this.container = document.getElementById('canvas-container');
-    this.shotAngleDeg = 0; // 0 = straight down ground, 45 = cover drive, 90 = cut, 270 = pull
+    this.shotAngleDeg = 0;
     this.isLofted = false;
     this.isBallInPlay = false;
 
+    // Default Match Configuration
+    this.userTeamKey = "PAK";
+    this.oppTeamKey = "IND";
+    this.selectedOvers = 2;
+    this.userDecision = "BAT";
+
     this.initThree();
     this.initSystems();
+    this.initModals();
     this.initControls();
-    this.initUI();
 
     window.addEventListener('resize', () => this.onWindowResize());
     this.animate(0);
   }
 
   initThree() {
-    // Scene
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x060c18); // Night sky
+    this.scene.background = new THREE.Color(0x060c18);
     this.scene.fog = new THREE.FogExp2(0x060c18, 0.008);
 
-    // Camera: Broadcast batsman shoulder view looking down 22 yards
     this.camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 300);
-    this.defaultCamPos = new THREE.Vector3(0, 3.2, 14.8);
-    this.camera.position.copy(this.defaultCamPos);
+    this.matchCamPos = new THREE.Vector3(0, 3.2, 14.8);
+    this.tossCamPos = new THREE.Vector3(0, 2.5, 4.5);
+    this.camera.position.copy(this.matchCamPos);
     this.camera.lookAt(0, 1.4, 0);
 
-    // Renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -52,20 +58,186 @@ class ProCricketGame {
     this.players = new PlayerRigs(this.scene);
     this.ballPhysics = new BallPhysicsEngine(this.scene);
     this.sound = new SoundEngine();
-    this.match = new MatchEngine();
+    this.tossEngine = new TossEngine(this.scene, this.camera);
+  }
 
-    // Stumps collision callback
-    this.ballPhysics.onPitchBounce = (pos) => {
-      // Check if it bounced on pitch
-    };
+  // ==========================================================
+  // MODAL FLOW: TEAM SELECTION -> 3D TOSS -> LINEUPS -> MATCH
+  // ==========================================================
+  initModals() {
+    // 1. Team Selection Chips
+    const userChips = document.querySelectorAll('#user-team-chips .team-chip');
+    userChips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        userChips.forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        this.userTeamKey = chip.getAttribute('data-team');
+      });
+    });
+
+    const oppChips = document.querySelectorAll('#opp-team-chips .team-chip');
+    oppChips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        oppChips.forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        this.oppTeamKey = chip.getAttribute('data-team');
+      });
+    });
+
+    // 2. Overs Chips
+    const oversChips = document.querySelectorAll('#overs-chips .overs-chip');
+    oversChips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        oversChips.forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        this.selectedOvers = parseInt(chip.getAttribute('data-overs'));
+      });
+    });
+
+    // Proceed to Toss Button
+    document.getElementById('btn-proceed-toss').addEventListener('click', () => {
+      if (this.userTeamKey === this.oppTeamKey) {
+        alert("Please pick two different teams!");
+        return;
+      }
+      this.openTossModal();
+    });
+
+    // Toss Call Buttons (Heads / Tails)
+    const tossCallBtns = document.querySelectorAll('.toss-choice-btn[data-call]');
+    tossCallBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const call = btn.getAttribute('data-call');
+        this.triggerTossCoin(call);
+      });
+    });
+
+    // Toss Bat / Bowl decisions
+    document.getElementById('btn-decide-bat').addEventListener('click', () => {
+      this.userDecision = "BAT";
+      this.openLineupModal();
+    });
+
+    document.getElementById('btn-decide-bowl').addEventListener('click', () => {
+      this.userDecision = "BOWL";
+      this.openLineupModal();
+    });
+
+    // Start Match Button
+    document.getElementById('btn-start-match').addEventListener('click', () => {
+      this.startActualMatch();
+    });
+  }
+
+  openTossModal() {
+    document.getElementById('setup-modal').style.display = 'none';
+    const tossModal = document.getElementById('toss-modal');
+    tossModal.style.display = 'flex';
+
+    const userTeam = Teams[this.userTeamKey];
+    const oppTeam = Teams[this.oppTeamKey];
+    document.getElementById('toss-captains-label').textContent = `${userTeam.captain} (${userTeam.name}) vs ${oppTeam.captain} (${oppTeam.name})`;
+
+    // Zoom camera to pitch center
+    this.camera.position.set(0, 2.2, 5.0);
+    this.camera.lookAt(0, 0.4, 0);
+  }
+
+  triggerTossCoin(userCall) {
+    document.getElementById('toss-call-section').style.display = 'none';
+    document.getElementById('toss-spinning-section').style.display = 'block';
+
+    this.tossEngine.executeToss(userCall, (outcome) => {
+      document.getElementById('toss-spinning-section').style.display = 'none';
+      const decisionSec = document.getElementById('toss-decision-section');
+      decisionSec.style.display = 'block';
+
+      const userTeam = Teams[this.userTeamKey];
+      const oppTeam = Teams[this.oppTeamKey];
+      const winnerBanner = document.getElementById('toss-winner-banner');
+
+      if (outcome.userWon) {
+        winnerBanner.textContent = `🎉 ${userTeam.name.toUpperCase()} WON THE TOSS!`;
+        winnerBanner.style.color = "#00e676";
+        document.getElementById('toss-instruction').textContent = "Choose your game strategy:";
+        document.getElementById('btn-decide-bat').style.display = 'inline-block';
+        document.getElementById('btn-decide-bowl').style.display = 'inline-block';
+      } else {
+        winnerBanner.textContent = `${oppTeam.name.toUpperCase()} WON THE TOSS!`;
+        winnerBanner.style.color = "#ff9100";
+        document.getElementById('toss-instruction').textContent = `${oppTeam.name} elected to BOWL first. You are batting!`;
+        document.getElementById('btn-decide-bowl').style.display = 'none';
+        document.getElementById('btn-decide-bat').textContent = "PROCEED TO MATCH";
+        this.userDecision = "BAT";
+      }
+    });
+  }
+
+  openLineupModal() {
+    this.tossEngine.hideCoin();
+    document.getElementById('toss-modal').style.display = 'none';
+    const lineupModal = document.getElementById('lineup-modal');
+    lineupModal.style.display = 'flex';
+
+    const team1 = Teams[this.userTeamKey];
+    const team2 = Teams[this.oppTeamKey];
+
+    document.getElementById('lineup-team1-name').textContent = `${team1.flag} ${team1.name.toUpperCase()}`;
+    document.getElementById('lineup-team2-name').textContent = `${team2.flag} ${team2.name.toUpperCase()}`;
+
+    const list1 = document.getElementById('lineup-team1-list');
+    list1.innerHTML = '';
+    team1.squad.forEach((p, idx) => {
+      const li = document.createElement('li');
+      li.textContent = `${idx + 1}. ${p.name} - ${p.role}`;
+      list1.appendChild(li);
+    });
+
+    const list2 = document.getElementById('lineup-team2-list');
+    list2.innerHTML = '';
+    team2.squad.forEach((p, idx) => {
+      const li = document.createElement('li');
+      li.textContent = `${idx + 1}. ${p.name} - ${p.role}`;
+      list2.appendChild(li);
+    });
+  }
+
+  startActualMatch() {
+    document.getElementById('lineup-modal').style.display = 'none';
+
+    // Show Broadcast HUD, Delivery Picker, and Controls
+    document.getElementById('hud-layer').style.display = 'flex';
+    document.getElementById('controls-layer').style.display = 'flex';
+    document.getElementById('delivery-picker').style.display = 'block';
+
+    const userTeam = Teams[this.userTeamKey];
+    const oppTeam = Teams[this.oppTeamKey];
+
+    let battingTeam = this.userDecision === "BAT" ? userTeam : oppTeam;
+    let bowlingTeam = this.userDecision === "BAT" ? oppTeam : userTeam;
+
+    // Apply National Team Kits to 3D Players
+    this.players.setTeamKits(battingTeam, bowlingTeam);
+
+    // Initialize Match Engine with chosen teams and format
+    this.match = new MatchEngine(battingTeam, bowlingTeam, this.selectedOvers);
+    this.initUI();
+
+    // Reset Camera to Broadcast Third-Person View
+    this.camera.position.copy(this.matchCamPos);
+    this.camera.lookAt(0, 1.4, 0);
+
+    document.getElementById('hud-match-title').textContent = `${battingTeam.id} vs ${bowlingTeam.id} T20`;
+    document.getElementById('hud-team-badge').textContent = battingTeam.id;
+    document.getElementById('commentary-text').textContent = `Match underway! ${battingTeam.squad[0].name} takes strike against ${bowlingTeam.squad[7].name}.`;
   }
 
   initControls() {
-    // 1. Bowl Ball Trigger
+    // Bowl Ball Trigger (Runs up and bowls)
     const bowlBtn = document.getElementById('bowl-trigger-btn');
     bowlBtn.addEventListener('click', () => this.deliverNextBall());
 
-    // 2. Lofted / Grounded Switch
+    // Lofted Switch
     const loftBtn = document.getElementById('loft-toggle-btn');
     loftBtn.addEventListener('click', () => {
       this.isLofted = !this.isLofted;
@@ -73,7 +245,7 @@ class ProCricketGame {
       loftBtn.textContent = this.isLofted ? 'LOFTED [6]' : 'GROUNDED [4]';
     });
 
-    // 3. Batting Hit Trigger
+    // Batting Hit Trigger
     const hitBtn = document.getElementById('hit-shot-btn');
     const executeHit = (e) => {
       e.preventDefault();
@@ -82,7 +254,7 @@ class ProCricketGame {
     hitBtn.addEventListener('mousedown', executeHit);
     hitBtn.addEventListener('touchstart', executeHit);
 
-    // Keyboard shortcuts (Space = Swing, B = Bowl, L = Loft, Arrows = Aim)
+    // Keyboard shortcuts
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space') {
         this.handleBatSwing();
@@ -99,7 +271,6 @@ class ProCricketGame {
       }
     });
 
-    // 4. 360 Radial Joystick Aiming Wheel
     this.initJoystick();
   }
 
@@ -115,16 +286,15 @@ class ProCricketGame {
       const dx = clientX - centerX;
       const dy = clientY - centerY;
 
-      const dist = Math.min(Math.sqrt(dx * dx + dy * dy), 42);
+      const dist = Math.min(Math.sqrt(dx * dx + dy * dy), 36);
       const angleRad = Math.atan2(dy, dx);
 
       handle.style.transform = `translate(${Math.cos(angleRad) * dist}px, ${Math.sin(angleRad) * dist}px)`;
 
-      // Convert angle: Up (dy < 0) is Straight (0 deg), Right is Off-side (90 deg), Left is Leg-side (270 deg)
       let deg = THREE.MathUtils.radToDeg(Math.atan2(dx, -dy));
       if (deg < 0) deg += 360;
 
-      const shotName = this.match.getShotName(deg, this.isLofted);
+      const shotName = this.match ? this.match.getShotName(deg, this.isLofted) : "Shot";
       this.setShotAngle(deg, shotName);
     };
 
@@ -152,30 +322,29 @@ class ProCricketGame {
   }
 
   deliverNextBall() {
-    if (this.isBallInPlay) return;
+    if (this.isBallInPlay || this.players.isBowlerRunning) return;
 
-    this.isBallInPlay = true;
     this.stadium.resetBails();
     this.players.reset();
 
     const select = document.getElementById('delivery-select');
     const delivery = select ? select.value : DeliveryTypes.OUTSWING;
 
-    // Speed variation between 136 and 152 km/h for fast, or 84-94 for spin
     let speed = 144 + Math.round((Math.random() - 0.5) * 12);
     if (delivery.includes('Spin') || delivery.includes('Googly') || delivery.includes('Break')) {
       speed = 88 + Math.round((Math.random() - 0.5) * 8);
     }
 
-    // Pitch bounce target (length)
     let targetZ = 6.2 + (Math.random() - 0.5) * 1.5;
     let targetX = (Math.random() - 0.5) * 0.45;
 
-    this.sound.playBowlingWhoosh();
-    this.ballPhysics.bowlDelivery(delivery, targetZ, targetX, speed);
-
-    // Show speed radar
-    this.displaySpeedRadar(speed);
+    // Trigger Bowler Physical Run-Up!
+    this.players.startBowlerRunUp(() => {
+      this.isBallInPlay = true;
+      this.sound.playBowlingWhoosh();
+      this.ballPhysics.bowlDelivery(delivery, targetZ, targetX, speed);
+      this.displaySpeedRadar(speed);
+    });
   }
 
   displaySpeedRadar(speed) {
@@ -194,10 +363,8 @@ class ProCricketGame {
 
     if (!this.isBallInPlay || !this.ballPhysics.isInFlight) return;
 
-    // Evaluate timing based on ball Z coordinate relative to batting crease (z = 9.15m)
     const ballZ = this.ballPhysics.position.z;
     let timingGrade = 'MISSED';
-
     const deltaZ = Math.abs(ballZ - 9.15);
 
     if (deltaZ <= 0.45) {
@@ -213,21 +380,17 @@ class ProCricketGame {
     }
 
     if (timingGrade !== 'MISSED') {
-      this.isBallInPlay = false; // Ball struck
+      this.isBallInPlay = false;
 
-      // Calculate exit velocity
       const power = timingGrade === 'PERFECT' ? (this.isLofted ? 46 : 38) : (timingGrade === 'GOOD' ? 32 : 18);
       const rad = THREE.MathUtils.degToRad(this.shotAngleDeg);
 
-      // Shot direction vector (facing toward outfield)
-      // In Three.js: 0 deg = -Z (straight back to bowler), 90 deg = +X (off-side), 270 deg = -X (leg-side)
       const vx = Math.sin(rad) * power;
       const vz = -Math.cos(rad) * power;
       const elevation = this.isLofted ? (timingGrade === 'PERFECT' ? 34 : 48) : 4;
 
       this.ballPhysics.applyBatHit(new THREE.Vector3(vx, 0, vz), elevation);
 
-      // Process match score outcome
       const outcome = this.match.processShot(timingGrade, this.shotAngleDeg, this.isLofted, power * 3.6);
       this.triggerOutcomeCelebration(outcome);
     }
@@ -245,8 +408,6 @@ class ProCricketGame {
       badge.textContent = 'MAXIMUM 6';
       sub.textContent = `${outcome.shotName.toUpperCase()} - SOARING HIGH!`;
       this.sound.playCrowdRoar(true);
-
-      // Fireworks Confetti!
       confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
     } else if (outcome.runs === 4) {
       badge.classList.add('four');
@@ -259,7 +420,7 @@ class ProCricketGame {
       sub.textContent = outcome.commentary;
       this.sound.playStumpsShatter();
     } else {
-      return; // No big alert for 0, 1, 2 runs
+      return;
     }
 
     alertBox.classList.add('active');
@@ -271,7 +432,6 @@ class ProCricketGame {
 
     const pos = this.ballPhysics.position;
 
-    // Batsman stumps are at z = 10.06m, x in [-0.15, 0.15], y <= 0.72m
     if (pos.z >= 10.0 && pos.z <= 10.25) {
       if (Math.abs(pos.x) <= 0.16 && pos.y <= 0.73) {
         this.isBallInPlay = false;
@@ -284,7 +444,6 @@ class ProCricketGame {
       }
     }
 
-    // Ball passed batsman without contact and without hitting stumps (Dot ball)
     if (pos.z > 12.0 && this.isBallInPlay) {
       this.isBallInPlay = false;
       this.match.processShot('MISSED', 0, false, 140);
@@ -293,6 +452,7 @@ class ProCricketGame {
 
   initUI() {
     this.match.subscribe((state) => {
+      document.getElementById('hud-team-badge').textContent = state.teamBatting.id;
       document.getElementById('main-score').textContent = `${state.runs}/${state.wickets}`;
       document.getElementById('main-overs').textContent = `(${state.oversStr})`;
       document.getElementById('crr-text').textContent = `CRR: ${state.crr}`;
@@ -315,12 +475,10 @@ class ProCricketGame {
       document.getElementById('bowler-name').textContent = state.bowler.name;
       document.getElementById('bowler-figs').textContent = `${state.bowler.overs}-${state.bowler.wickets}-${state.bowler.runs}`;
 
-      // Commentary
       if (state.lastOutcome) {
         document.getElementById('commentary-text').textContent = state.lastOutcome.commentary;
       }
 
-      // Recent balls pills
       const ballsContainer = document.getElementById('recent-balls');
       ballsContainer.innerHTML = '';
       state.recentOvers.slice(-6).forEach((ball) => {
@@ -342,13 +500,11 @@ class ProCricketGame {
 
     this.ballPhysics.update(dt);
     this.players.update(dt);
+    this.tossEngine.update(dt);
     this.checkStumpsCollision();
 
-    // Subtle broadcast camera dynamic tracking
     if (this.ballPhysics.isInFlight && this.ballPhysics.position.z < 8.0) {
-      this.camera.position.x = this.defaultCamPos.x + this.ballPhysics.position.x * 0.15;
-    } else {
-      this.camera.position.x = THREE.MathUtils.lerp(this.camera.position.x, this.defaultCamPos.x, dt * 2.0);
+      this.camera.position.x = this.matchCamPos.x + this.ballPhysics.position.x * 0.15;
     }
 
     this.renderer.render(this.scene, this.camera);
@@ -361,7 +517,6 @@ class ProCricketGame {
   }
 }
 
-// Boot up game on DOM ready
 window.addEventListener('DOMContentLoaded', () => {
   new ProCricketGame();
 });
