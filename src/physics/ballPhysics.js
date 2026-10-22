@@ -15,52 +15,45 @@ export class BallPhysicsEngine {
   constructor(scene) {
     this.scene = scene;
     this.mass = 0.160; // 160g cricket ball
-    this.radius = 0.036; // 3.6cm
+    this.radius = 0.036; // 3.6cm radius
     this.airDensity = 1.225;
     this.dragCoeff = 0.45;
     this.gravity = -9.81;
 
-    // Pitch dimensions (standard 22 yards = 20.12m)
-    this.pitchZMin = -10.06;
-    this.pitchZMax = 10.06;
-    this.pitchHalfWidth = 1.52; // 3.05m pitch width
-
-    // State
     this.isInFlight = false;
     this.hasPitched = false;
     this.position = new THREE.Vector3();
     this.velocity = new THREE.Vector3();
-    this.spin = new THREE.Vector3(); // angular velocity (rad/s)
+    this.seamAngleDeg = 0;
+    this.spinRpm = 1200;
     this.currentDelivery = DeliveryTypes.OUTSWING;
 
-    // 3D Mesh
+    this.pitchRestitution = 0.58; // Standard turf
+    this.pitchFriction = 0.88;
+
     this.mesh = this.createBallMesh();
     this.scene.add(this.mesh);
 
-    // Ball trail
     this.trailPoints = [];
-    this.maxTrailLength = 40;
+    this.maxTrailLength = 45;
     this.trailGeometry = new THREE.BufferGeometry();
     this.trailMaterial = new THREE.LineBasicMaterial({
       color: 0xff3b30,
       transparent: true,
-      opacity: 0.7,
+      opacity: 0.8,
       linewidth: 3
     });
     this.trailLine = new THREE.Line(this.trailGeometry, this.trailMaterial);
     this.scene.add(this.trailLine);
 
     this.onPitchBounce = null;
-    this.onWicketsHit = null;
   }
 
   createBallMesh() {
     const group = new THREE.Group();
-
-    // Red Kookaburra/Dukes ball body
     const sphereGeo = new THREE.SphereGeometry(this.radius, 24, 24);
     const sphereMat = new THREE.MeshStandardMaterial({
-      color: 0xba131a, // Rich international cricket red
+      color: 0xba131a, // Red Kookaburra/Dukes
       roughness: 0.35,
       metalness: 0.1
     });
@@ -68,90 +61,78 @@ export class BallPhysicsEngine {
     sphere.castShadow = true;
     group.add(sphere);
 
-    // Raised white seam
     const seamGeo = new THREE.TorusGeometry(this.radius * 0.99, 0.002, 12, 48);
     const seamMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const seam = new THREE.Mesh(seamGeo, seamMat);
     seam.rotation.x = Math.PI / 2;
     group.add(seam);
 
-    group.position.set(0, -10, 0); // Hide until bowled
+    group.position.set(0, -10, 0);
     return group;
   }
 
-  bowlDelivery(deliveryType, targetPitchZ = 6.0, targetPitchX = 0.0, speedKmh = 142) {
+  bowlDelivery(deliveryType, targetPitchZ = 6.2, targetPitchX = 0.0, speedKmh = 142) {
     this.currentDelivery = deliveryType;
     this.hasPitched = false;
     this.isInFlight = true;
     this.trailPoints = [];
 
-    // Bowler release coordinates (from bowler end: z = -10.0m, height = 2.15m)
     const releasePos = new THREE.Vector3(0.35, 2.15, -10.0);
     this.position.copy(releasePos);
     this.mesh.position.copy(releasePos);
 
-    // Calculate release speed in m/s
     let speedMs = (speedKmh * 1000) / 3600;
 
-    // Delivery specific adjustments
-    let seamTilt = 0;
-    let spinRpm = 1400;
+    this.seamAngleDeg = 0;
+    this.spinRpm = 1400;
 
     switch (deliveryType) {
       case DeliveryTypes.OUTSWING:
-        seamTilt = 18; // Lateral swing away from right hander
+        this.seamAngleDeg = 15; // +15 deg = conventional swing away toward slips (+X)
         break;
       case DeliveryTypes.INSWING:
-        seamTilt = -18; // Inward swing into right hander
+        this.seamAngleDeg = -15; // -15 deg = conventional swing into stumps (-X)
         break;
       case DeliveryTypes.YORKER:
-        targetPitchZ = 8.5; // Very full at batsman toes
+        targetPitchZ = 8.6;
+        this.seamAngleDeg = -8;
         speedMs *= 1.02;
         break;
       case DeliveryTypes.BOUNCER:
-        targetPitchZ = 2.0; // Short pitch
-        speedMs *= 1.04;
+        targetPitchZ = 2.4;
+        speedMs *= 1.05;
         break;
       case DeliveryTypes.SLOWER:
         speedMs *= 0.78;
-        spinRpm = 800;
+        this.spinRpm = 800;
         break;
       case DeliveryTypes.LEGSPIN:
         speedMs = (88 * 1000) / 3600;
-        spinRpm = 2400;
-        seamTilt = -45;
+        this.spinRpm = 2400;
+        this.seamAngleDeg = -45;
         break;
       case DeliveryTypes.OFFSPIN:
         speedMs = (92 * 1000) / 3600;
-        spinRpm = 2200;
-        seamTilt = 45;
+        this.spinRpm = 2200;
+        this.seamAngleDeg = 45;
         break;
       case DeliveryTypes.GOOGLY:
         speedMs = (86 * 1000) / 3600;
-        spinRpm = 2500;
-        seamTilt = 55;
+        this.spinRpm = 2500;
+        this.seamAngleDeg = 55;
         break;
     }
 
-    // Direction to pitch bounce target
     const targetPos = new THREE.Vector3(targetPitchX, 0.036, targetPitchZ);
     const toTarget = new THREE.Vector3().subVectors(targetPos, releasePos);
     const horizontalDist = Math.sqrt(toTarget.x * toTarget.x + toTarget.z * toTarget.z);
     const timeToPitch = horizontalDist / speedMs;
 
-    // Initial velocity components
     const vy = (toTarget.y - 0.5 * this.gravity * timeToPitch * timeToPitch) / timeToPitch;
     const vx = toTarget.x / timeToPitch;
     const vz = toTarget.z / timeToPitch;
 
     this.velocity.set(vx, vy, vz);
-
-    // Spin vector (radians/sec)
-    const spinRadSec = (spinRpm * 2 * Math.PI) / 60;
-    const seamRad = THREE.MathUtils.degToRad(seamTilt);
-    this.spin.set(Math.sin(seamRad) * spinRadSec, Math.cos(seamRad) * spinRadSec, 0);
-
-    return { speedKmh, deliveryType, releasePos };
   }
 
   update(dt) {
@@ -163,44 +144,39 @@ export class BallPhysicsEngine {
       return;
     }
 
-    // 1. Aerodynamic Air Drag: Fd = -0.5 * rho * v^2 * Cd * A * v_hat
     const area = Math.PI * this.radius * this.radius;
+
+    // 1. Aerodynamic Drag: Fd = -0.5 * rho * v^2 * Cd * A * v_hat
     const dragMagnitude = 0.5 * this.airDensity * speed * speed * this.dragCoeff * area;
     const dragForce = this.velocity.clone().normalize().multiplyScalar(-dragMagnitude);
 
-    // 2. Magnus Effect (Aerodynamic Swing in flight): Fm = S * (spin x velocity)
-    const spinCrossV = new THREE.Vector3().crossVectors(this.spin, this.velocity);
-    const magnusFactor = 0.00015; // Tuned for authentic international cricket swing
-    const magnusForce = spinCrossV.multiplyScalar(magnusFactor);
+    // 2. Aerodynamic Seam Lateral Force (Boundary Layer Tripping)
+    const seamRad = THREE.MathUtils.degToRad(this.seamAngleDeg);
+    const sideForceCoeff = Math.sin(seamRad) * 0.28;
+    const sideForceMag = 0.5 * this.airDensity * speed * speed * sideForceCoeff * area;
+    const sideForce = new THREE.Vector3(sideForceMag, 0, 0);
 
     // 3. Gravity
     const gravityForce = new THREE.Vector3(0, this.mass * this.gravity, 0);
 
-    // Net Acceleration = F / m
-    const totalForce = new THREE.Vector3()
-      .add(dragForce)
-      .add(magnusForce)
-      .add(gravityForce);
+    // Net Acceleration = Total Force / mass
+    const totalForce = new THREE.Vector3().add(dragForce).add(sideForce).add(gravityForce);
     const acceleration = totalForce.divideScalar(this.mass);
 
-    // Verlet integration step
     this.velocity.addScaledVector(acceleration, dt);
     this.position.addScaledVector(this.velocity, dt);
 
-    // Check Pitch Ground Collision (y <= radius)
+    // Pitch Collision
     if (this.position.y <= this.radius && this.velocity.y < 0) {
       this.handlePitchImpact();
     }
 
-    // Update 3D mesh
     this.mesh.position.copy(this.position);
-    this.mesh.rotation.x += this.spin.x * dt * 0.1;
-    this.mesh.rotation.y += this.spin.y * dt * 0.1;
+    this.mesh.rotation.x += dt * 15.0;
+    this.mesh.rotation.y += THREE.MathUtils.degToRad(this.seamAngleDeg) * dt * 5.0;
 
-    // Update Trail
     this.updateTrail();
 
-    // Check boundary / out of bounds limits
     if (this.position.length() > 85 || this.position.y < -1) {
       this.isInFlight = false;
     }
@@ -210,24 +186,21 @@ export class BallPhysicsEngine {
     this.position.y = this.radius;
     this.hasPitched = true;
 
-    // Pitch Restitution (bounce factor)
-    const restitution = 0.58; // Standard 22-yard turf pitch
-    this.velocity.y = -this.velocity.y * restitution;
+    // Vertical Restitution
+    this.velocity.y = -this.velocity.y * this.pitchRestitution;
 
-    // Friction slows down forward slide
-    this.velocity.z *= 0.88;
+    // Horizontal Pitch Friction
+    this.velocity.z *= this.pitchFriction;
 
-    // Spin / Seam Deviation off pitch
+    // Spin / Seam Lateral Bite off Pitch
     if (this.currentDelivery === DeliveryTypes.OFFSPIN || this.currentDelivery === DeliveryTypes.GOOGLY) {
-      // Turns in towards right handed batsman (negative X)
-      this.velocity.x -= 1.8;
+      this.velocity.x -= 1.6; // Bites and turns inside into right-hander
     } else if (this.currentDelivery === DeliveryTypes.LEGSPIN) {
-      // Turns away from right handed batsman (positive X)
-      this.velocity.x += 1.8;
+      this.velocity.x += 1.6; // Bites and turns outside away from right-hander
     } else if (this.currentDelivery === DeliveryTypes.OUTSWING) {
-      this.velocity.x += 0.45; // Seam away movement
+      this.velocity.x += 0.35; // Seam away
     } else if (this.currentDelivery === DeliveryTypes.INSWING) {
-      this.velocity.x -= 0.45; // Nip backer
+      this.velocity.x -= 0.35; // Nip back
     }
 
     if (this.onPitchBounce) {
@@ -237,12 +210,11 @@ export class BallPhysicsEngine {
 
   applyBatHit(exitVelocity, elevationAngleDeg) {
     this.velocity.copy(exitVelocity);
-    // Impart elevation
     const horizontalSpeed = Math.sqrt(exitVelocity.x * exitVelocity.x + exitVelocity.z * exitVelocity.z);
     const rad = THREE.MathUtils.degToRad(elevationAngleDeg);
     this.velocity.y = Math.sin(rad) * horizontalSpeed * 1.1;
 
-    this.spin.set(0, 180, 0); // Backspin
+    this.seamAngleDeg = 0;
     this.trailPoints = [];
     this.hasPitched = false;
   }
@@ -253,6 +225,11 @@ export class BallPhysicsEngine {
       this.trailPoints.shift();
     }
     this.trailGeometry.setFromPoints(this.trailPoints);
+  }
+
+  stopFlight() {
+    this.isInFlight = false;
+    this.velocity.set(0, 0, 0);
   }
 
   reset() {
